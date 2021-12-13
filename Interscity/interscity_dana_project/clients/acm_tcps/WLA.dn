@@ -1,0 +1,44 @@
+const char debugMSG[] = "[@Server]"
+
+//TODO: refactor -- a lot of code repeating itself.
+component provides App requires io.Output out, data.IntUtil intUtil, net.TCPSocket, 
+	net.TCPServerSocket, data.StringUtil strUtil, io.TextFile, time.DateUtil dateUtil,
+	time.Calendar ic, net.http.HTTPRequest request, util.RandomInt ranInt, time.Timer t {
+
+	char SERVERADDR[] = "34.69.215.148:2020"
+	//char SERVERADDR[] = "scc-mc1.lancs.ac.uk:2020"
+
+	void execute() {
+		Header header[] = new Header[](new Header("Cache-Control", 
+				new char[]("max-age=5")))
+		char url[] = new char[](SERVERADDR, "/collector/resources/1/data/last")
+		HTTPResponse response = request.get(url, header)
+	}
+
+	void threadExec(int numThread) {
+		DateTime dt1 = null
+		DateTime dt2 = null
+		int result = 0
+		dt1 = ic.getTime()
+		Thread thread[] = new Thread[numThread]
+		for (int i = 0; i < numThread; i++) {
+			thread[i] = asynch::execute()
+		}
+		for (int i = 0; i < numThread; i++) {
+			thread[i].join()
+		}
+		dt2 = ic.getTime()
+		if ((dt1 != null) && (dt2 != null)) {
+			result = dateUtil.toMilliseconds(dateUtil.diff(dt1, dt2))
+			out.println( "$(intUtil.intToString(result))")
+		}
+	}
+
+	int App:main(AppParam params[]) {
+		while (true) {
+			asynch::threadExec(20)
+			t.sleep(1000)
+		}
+		return 0
+	}
+}

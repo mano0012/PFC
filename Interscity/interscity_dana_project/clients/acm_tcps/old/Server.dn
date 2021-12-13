@@ -1,0 +1,133 @@
+const char debugMSG[] = "[@Server]"
+const char STOP[] = "stop"
+const char START[] = "start"
+
+//TODO: refactor -- a lot of code repeating itself.
+component provides App requires io.Output out, data.IntUtil intUtil, net.TCPSocket, 
+	net.TCPServerSocket, data.StringUtil strUtil, io.TextFile, time.DateUtil dateUtil,
+	time.Calendar ic, net.http.HTTPRequest request, util.RandomInt ranInt {
+
+	bool testRunning = false
+
+	void execute(int threadID, char size[], char entropy[], 
+		char cache[], char service[], char fileName[]) {
+		DateTime currentDate = ic.getTime()
+		ranInt.setSeed(dateUtil.toMilliseconds(currentDate))
+		TextFile file = new TextFile(new char[](intUtil.intToString(threadID), 
+			"-", fileName), File.WRITE)
+		Header header[] = null
+		char url[] = null
+		int id = 0
+		int max = 0
+		int min = 0
+		if (cache == "no") {
+			header = new Header[](new Header("Cache-Control", "no-cache"))
+		} else {
+			header = new Header[](new Header("Cache-Control", 
+				new char[]("max-age=", cache)))
+		}
+		if (entropy == "low") {
+			if (size == "one") { url = new char[](service, "/collector/resources/1/data/last") }
+			if (size == "small") { url = new char[](service, "/collector/resources/10/data") }
+			if (size == "big") { url = new char[](service, "/collector/resources/55/data") }
+		} else if (entropy == "high") {
+			if (size == "one") {
+				id = 1
+				max = 50
+				min = 1
+			} else if (size == "small") { 
+				max = 50
+				min = 1
+			} else (size == "big") {
+				max = 100
+				min = 51
+			}
+		}
+		out.println("$(debugMSG) Test starting...")
+		while(testRunning) {
+			if (entropy == "high") {
+				if (size == "one") {
+					id = ranInt.get(max+1)
+					if (id < min) { id += min }
+					url = new char[](service, "/collector/resources/", intUtil.intToString(id), "/data/last")
+					//id++
+					//if (id == (max+1)) { id = min }
+				} else if (size == "small") {
+					id = ranInt.get(max+1)
+					if (id < min) { id += min }
+					url = new char[](service, "/collector/resources/", intUtil.intToString(id),"/data")
+					//id++
+					//if (id == (max+1)) { id = min }	
+				} else if (size == "big") {
+					id = ranInt.get(max+1)
+					if (id < min) { id += min }			
+					url = new char[](service, "/collector/resources/", intUtil.intToString(id),"/data")
+					//id++
+					//if (id == (max+1)) { id = min }
+				}
+			}
+			DateTime dt1 = null
+			DateTime dt2 = null
+			int result = 0
+			dt1 = ic.getTime()
+			//out.println("$url")
+			HTTPResponse response = request.get(url, header)
+			dt2 = ic.getTime()
+			if ((dt1 != null) && (dt2 != null)) {
+				result = dateUtil.toMilliseconds(dateUtil.diff(dt1, dt2))
+				file.writeLine(new char[](intUtil.intToString(result)))
+			}
+		}
+		file.close()
+		out.println("$(debugMSG) Test finished.")
+	}
+
+	void run(int numClients, char workload[], char service[], char fileName[]) {
+		String helper[] = strUtil.explode(workload, "_")
+		for (int i = 0; i < numClients; i++) {
+			asynch::execute(i+1, helper[0].string, helper[1].string, 
+				helper[2].string, service, fileName)
+		}
+	}
+	
+	void interpreter(char cmd[]) {
+		String helper[] = strUtil.explode(cmd, "|")
+		if (helper[0].string == START) {
+			testRunning = true
+			run(intUtil.intFromString(helper[1].string), 
+				helper[2].string, helper[3].string, helper[4].string)
+		} else if (helper[0].string == STOP) {
+			if (testRunning) { out.println("$(debugMSG) Stopping test...") }
+			else { out.println("$debugMSG) No tests are running...") }
+			testRunning = false
+			if(!testRunning) { out.println("$(debugMSG) Done.") }
+		}
+	}
+
+	void process(TCPSocket socket) {
+		char buf[] = null
+		char last4[] = new char[4]
+		while (last4 != "\r\n\r\n") {
+			char b[] = socket.recv(1)
+			buf = new char[](buf, b)
+			last4[0] = last4[1]
+			last4[1] = last4[2]
+			last4[2] = last4[3]
+			last4[3] = b[0]
+		}
+		socket.disconnect()
+		interpreter(buf)
+	}
+
+	int App:main(AppParam params[]) {
+		TCPServerSocket s = new TCPServerSocket()
+		if (!s.bind(TCPServerSocket.ANY_ADDRESS, 1988)) {
+			throw new Exception("Failed to bind master socket")
+		}
+		while (true) {
+			TCPSocket cs = new TCPSocket()
+			if (cs.accept(s)) { asynch::process(cs) }
+		}
+		return 0
+	}
+}

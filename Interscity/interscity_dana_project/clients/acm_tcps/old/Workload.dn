@@ -1,0 +1,89 @@
+// dana Workload id cache-control entropy
+// e.g. dana Workload 3 -1 h
+// id == -1 --- return 1 record
+// id <= 50 --- small returned files (100 records)
+// id > 50 --- big returned files (800 records)
+// cache-control = -1 --- no-cache
+// cache-control = 1 --- 1 second
+// cache-control = 5 --- 5 seconds
+// entropy = h --- high entropy
+// entropy != h --- low entropy
+
+//const char URL[] = "35.188.47.150:2020"
+const char URL[] = "scc-mc1.lancs.ac.uk:2020"
+//const char URL[] = "35.222.51.36:2012"
+
+component provides App requires io.Output out, net.http.HTTPRequest request,
+	data.IntUtil iu, time.Calendar ic, time.DateUtil dateUtil {
+
+	int App:main(AppParam params[]) {
+		Header header[] = null
+		bool entropy = false
+		char url[] = null
+		int id = 0
+		int max = 0
+		int min = 0
+
+		// cache-control stuff
+		if (params[1] != null) {
+			if (params[1].string == "-1") {
+				header = new Header[](new Header("Cache-Control", "no-cache"))
+			} else {
+				out.println("max-age $(params[1].string)!")
+				header = new Header[](new Header("Cache-Control", 
+					new char[]("max-age=", params[1].string)))
+			}
+		}
+
+		// entropy high or low, etc.
+		if (params[2] != null) {
+			if (params[2].string == "h") {
+				entropy = true
+				id = iu.intFromString(params[0].string)
+				if (id <= 50) { 
+					max = 50
+					min = 1
+				} else {
+					max = 100
+					min = 51
+				}
+			}
+		}
+
+		// one record or multiple record (if it is not set to -1)
+		if (params[0].string == "-1") {
+			id = 1
+			max = 50
+			min = 1
+		}
+
+		while(true) {
+			if (params[0].string == "-1") {
+				if (!entropy) { url = new char[](URL, "/collector/resources/1/data/last") }
+				else {
+					url = new char[](URL, "/collector/resources/", iu.intToString(id), "/data/last")
+					id++
+					if (id == (max+1)) { id = min }
+				}
+			} else {
+				if (!entropy) { url = new char[](URL, "/collector/resources/", params[0].string,"/data") }
+				else {
+					url = new char[](URL, "/collector/resources/", iu.intToString(id),"/data")
+					id++
+					if (id == (max+1)) { id = min }
+				}	
+			}
+			DateTime dt1 = null
+			DateTime dt2 = null
+			int result = 0
+			dt1 = ic.getTime()
+			HTTPResponse response = request.get(url, header)
+			dt2 = ic.getTime()
+			if ((dt1 != null) && (dt2 != null)) {
+				result = dateUtil.toMilliseconds(dateUtil.diff(dt1, dt2))
+			}
+			out.println("$(iu.intToString(result))")
+		}
+		return 0
+	}
+}

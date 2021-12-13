@@ -1,0 +1,83 @@
+// Module that interacts with HPA
+//
+// Author: Roberto Rodrigues Filho
+// August @ 2020
+
+const char debugMSG[] = "[@HPANotifier]"
+
+/* HPA gateway info */
+const char URL[] = "34.69.236.97"
+const int PORT 	 = 2006
+
+const char END[] = "\r\n\r\n"
+const char EXECUTION_TIME = "execution_time"
+const char REGISTER = "register"
+
+component provides hpa.HPANotifier requires io.Output out, data.IntUtil iu, 
+	net.TCPSocket, data.StringUtil strUtil, data.json.JSONParser parser,
+	data.DecUtil du {
+
+	int id = 0
+
+	bool HPANotifier:registerHPA() {
+		TCPSocket s = new TCPSocket()
+		if (!s.connect(URL, PORT)) { 
+			out.println(new char[]("Error while trying", 
+				"to connect to server", 
+				"$(URL)", 
+				" - $(iu.intToString(PORT))"))
+		} 
+		s.send(new char[](REGISTER, "|", END))
+		char buf[] = null
+		char last4[] = new char[4]
+		while (last4 != "\r\n\r\n") {
+			char b[] = s.recv(1)
+			buf = new char[](buf, b)
+			last4[0] = last4[1]
+			last4[1] = last4[2]
+			last4[2] = last4[3]
+			last4[3] = b[0]
+		}
+		s.disconnect()
+		String helper[] = strUtil.explode(buf, "|")
+		id = iu.intFromString(helper[1].string)
+		return true
+	}
+
+	void send(dec value) {
+		TCPSocket s = new TCPSocket()
+		if (!s.connect(URL, PORT)) { 
+			out.println(new char[]("Error while trying", 
+				"to connect to server", 
+				"$(URL)", 
+				" - $(iu.intToString(PORT))"))
+		} 
+		s.send(new char[](EXECUTION_TIME, "|", du.decToString(value), "|", 
+			iu.intToString(id), END))
+		s.disconnect()
+	}
+
+	dec process(char perceptionData[]) {
+		JSONElement document = parser.parseDocument(perceptionData)
+		JSONElement metricsJSON = parser.getValue(document, "metrics")
+		if (metricsJSON != null) {
+			for (int pointer = 0; pointer < metricsJSON.children.arrayLength; pointer++) {
+				JSONElement childrenMetrics = metricsJSON.children[pointer]
+				char name[] = parser.getValue(childrenMetrics, "name").value
+				int value = iu.intFromString(parser.getValue(childrenMetrics, "value").value)
+				int count = iu.intFromString(parser.getValue(childrenMetrics, "count").value)
+				dec metricValue
+				if (value == INT_MAX) { metricValue = 0.0 }
+				else { metricValue = value/count }
+				out.println("$(du.decToString(metricValue))")
+				return metricValue
+			}
+		}
+		return 0.0
+	}
+
+	void HPANotifier:notify(char perceptionData[]) {
+		send(process(perceptionData))
+	}
+
+} 

@@ -1,0 +1,4 @@
+interface HPANotifier {
+	bool registerHPA()
+	void notify(char perceptionData[])
+}

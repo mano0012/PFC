@@ -1,0 +1,47 @@
+component provides oracle.PortManager requires io.Output out {
+	
+	static int portNum = 0
+	static int firstPort = 0
+	static ProxyInfo info[] = null
+	static Mutex portLock = null
+	char myAddress[] = null
+
+	void PortManager:setInfo(int newPortNum, char localAddress[], ProxyInfo newInfo[]) {
+		// after the first time you set the portNum and the localAddress 
+		// you do not have to set it again --- actually, if you set it again
+		// the system will break, because it will try to bind the socket to an
+		// already in-use port and will throw an exception.
+		// in other words: only set these attributes once
+		if ((portNum == 0) && (firstPort == 0) && (myAddress == null)) {
+			if (localAddress != null) { myAddress = localAddress }
+			if (newPortNum != 0) {
+				portNum = newPortNum
+				firstPort = newPortNum
+			}
+		}
+		if (newInfo != null) { info = newInfo }
+		if (portLock == null) { portLock = new Mutex() }
+	}
+
+	ProxyInfo[] PortManager:generatePorts(int num) {
+		mutex(portLock) {
+			ProxyInfo genInfos[] = new ProxyInfo[num]
+			for (int i = 0; i < num; i++) {
+				genInfos[i] = new ProxyInfo()
+				genInfos[i].address = myAddress
+				genInfos[i].port = portNum
+				portNum++
+				if (portNum == 3066) { portNum = firstPort }
+			}
+			return genInfos
+		}
+	}
+
+	char[] PortManager:getLocalAddress() {
+		return myAddress
+	}
+
+	ProxyInfo[] PortManager:getInfo() {
+		return info
+	}
+}

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: metrics-server
+spec:
+  containers:
+  - name: metrics-server
+    image: gcr.io/kubernetes-pfc/metrics-server
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 3333
+      initialDelaySeconds: 3
+      periodSeconds: 3

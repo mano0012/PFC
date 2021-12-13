@@ -1,0 +1,33 @@
+// Module that interacts with HPA
+//
+// Author: Roberto Rodrigues Filho
+// August @ 2020
+
+const char debugMSG[] = "[@HPA]"
+
+/* HPA gateway info */
+const char URL[] = "scc-mc1.lancs.ac.uk"
+const int PORT 	 = 2006
+
+const char END[] = "\r\n\r\n"
+const char EXECUTION_TIME = "execution_time"
+const char REGISTER = "register"
+
+component provides App requires io.Output out, monitoring.Perception, 
+	learning.Learning learner, hpa.HPANotifier notifier {
+
+	Perception perception = null
+
+	int App:main(AppParam params[]) {
+		perception = new Perception(false)
+		AppParam params2[] = new AppParam[2]
+		params2[0] = new AppParam()
+		params2[0].string = "-p"
+		params2[1] = new AppParam()
+		params2[1].string = "2020"
+		perception.setMain("../repository/TCPNetwork.o", params2)
+		perception.addProxy("|../pal/monitoring/proxies/DCProxy.o|*(*:hh.HTTPHandler[0]:*)|")
+		learner.learns(perception, 5000, 3, 72, notifier)
+		return 0
+	}
+} 

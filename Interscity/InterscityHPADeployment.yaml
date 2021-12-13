@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: interscity-hpa-deployment
+  namespace: default
+  labels:
+    run: interscity-hpa-deployment 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: interscity-hpa-deployment
+  template:
+    metadata:
+      labels:
+        run: interscity-hpa-deployment
+    spec:
+      containers:
+      - name: interscity-hpa
+        image: gcr.io/kubernetes-pfc/interscity-hpa
+        resources:
+          requests:
+            cpu: 430m
+        readinessProbe:
+          httpGet:
+            path: /collector/resources/1/data/last
+            port: 2020
+          initialDelaySeconds: 30
+          periodSeconds: 10

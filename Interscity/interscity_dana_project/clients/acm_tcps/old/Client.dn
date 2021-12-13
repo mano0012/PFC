@@ -1,0 +1,122 @@
+const char debugMSG[] = "[@Client]"
+
+const char HELP[] = "help"
+const char TEST[] = "test"
+const char STOP[] = "stop"
+const char START[] = "start"
+const char END[] = "\r\n\r\n"
+
+data Test {
+	String servers[]
+	int numClients
+	char workload[]
+	char service[]
+	char fileName[]
+}
+
+//TODO: a lot of code is repeated here... that is not good! 
+component provides App requires io.Output out, data.IntUtil intUtil, net.TCPSocket, 
+	io.Input in, util.ConfigFile, data.StringUtil strUtil {
+
+	bool testRunning = false
+	Test test = null
+
+	void getTest(ConfigFile configFile) {
+		test = new Test()
+		test.servers = strUtil.explode(configFile.getValue("servers"), ",")
+		test.numClients = intUtil.intFromString(configFile.getValue("num_clients"))
+		test.workload = configFile.getValue("workload")
+		test.service = configFile.getValue("service")
+		test.fileName = configFile.getValue("file_name")
+	}
+
+	void initiateTest(int serverPointer) {
+		TCPSocket s = new TCPSocket()
+		if (!s.connect(strUtil.trim(test.servers[serverPointer].string), 1988)) { 
+			out.println(new char[]("Error while trying", 
+				"to connect to server", 
+				"$(test.servers[serverPointer].string)", 
+				" - 1988"))
+		} 
+		s.send(new char[](START,
+			"|",
+			intUtil.intToString(test.numClients),
+			"|",
+			test.workload, 
+			"|",
+			test.service,
+			"|",
+			test.fileName,
+			"|",
+			END))
+		s.disconnect()
+	}
+
+	void terminateTest(int serverPointer) {
+		TCPSocket s = new TCPSocket()
+		if (!s.connect(strUtil.trim(test.servers[serverPointer].string), 1988)) { 
+			out.println(new char[]("Error while trying", 
+				"to connect to server", 
+				"$(test.servers[serverPointer].string)", 
+				" - 1988"))
+		} 
+		s.send(new char[](STOP, "|", END))
+		s.disconnect()
+	}
+
+	void startTest() {
+		Thread threads[] = new Thread[test.servers.arrayLength]
+		for (int i = 0; i < test.servers.arrayLength; i++) {
+			threads[i] = asynch::initiateTest(i)
+		}
+		for (int i = 0; i < test.servers.arrayLength; i++) {
+			threads[i].join()
+		}
+		testRunning = true
+	}
+
+	void stopTest() {
+		Thread threads[] = new Thread[test.servers.arrayLength]
+		for (int i = 0; i < test.servers.arrayLength; i++) {
+			threads[i] = asynch::terminateTest(i)
+		}
+		for (int i = 0; i < test.servers.arrayLength; i++) {
+			threads[i].join()
+		}
+		testRunning = false
+		test = null	
+	}
+	
+	void commandInterpret(char cmd[]) {
+		if (cmd == HELP) {
+			out.println("$(debugMSG) help - give you a list of commands.")
+			out.println("$(debugMSG) test - to start running tests on the servers.")
+			out.println("$(debugMSG) stop - to stop running tests on all servers.")
+			out.println("$(debugMSG) exit - to exit the client program.")
+		} else if (cmd == TEST) {
+			if (!testRunning) {
+				out.println("$(debugMSG) Provide the configuration file to run the test: ")
+				out.print("$(debugMSG) test> ")
+				getTest(new ConfigFile(in.readln()))
+				startTest()
+				out.println("$(debugMSG) Tests are running!")
+			} else { out.println("$(debugMSG) There is already one test running...") }
+		} else if (cmd == STOP) {
+			if (testRunning) {
+				out.println("$(debugMSG) Stopping tests...")
+				stopTest()
+				out.println("$(debugMSG) Tests are all finished.")
+			} else { out.println("$(debugMSG) No test was running...")}
+		}
+	}
+
+	int App:main(AppParam params[]) {
+		char cmd[] = "start"
+		while (cmd != "exit") {
+			if (cmd != "start") { commandInterpret(cmd)	}
+			out.print("$(debugMSG) clients> ")
+			cmd = in.readln()
+		}
+		return 0
+	}
+}

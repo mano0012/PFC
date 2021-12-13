@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: emergent-microservice
+  name: emergent-microservice
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: emergent-microservice
+  template:
+    metadata:
+      labels:
+        run: emergent-microservice
+    spec:
+      containers:
+      - command: 
+        image: docker.io/robertovrf/em-hpa:default
+        name: emergent-microservice
+        ports:
+        - containerPort: 2020
+ 
+        resources:
+          requests:
+            cpu: 100m
+        env:
+          - name: POD_ID
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.uid

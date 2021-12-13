@@ -1,0 +1,89 @@
+// list of params
+const char IP_ADDR[] = "ip_addr"
+const char HELP[]     = "help"
+
+data ParsedParam {
+	char type[]
+	char value[]
+	char raw[]
+}
+
+component provides App requires io.Output out, io.FileSystem fSystem, io.TextFile {
+	char host[] = null
+
+	// add the alias mapping and do not forget to add composed args to the composedArg function
+	char[] getArg(char alias[]) {
+		if (alias == "-ip") { return IP_ADDR }
+		else if (alias == "-help") { return HELP }
+		else { throw new Exception("$alias not a valid param.") }
+		return null
+	}
+
+	// verify if a param is composed, i.e. -p 232
+	bool composedArg(char arg[]) {
+		if (arg == IP_ADDR) { return true }
+		return false
+	}
+
+	void help() {
+		out.println("DBInfoEditor [version 100]")
+		out.println("\nUsage: dana DBInfoEditor")
+		out.println("\nOptions:")
+		out.println("-help      \t List commands that can be passed as parameter to the DCScheme component.")
+		out.println("-ip [ip]\t Specify the server IP address of the database.")
+	}
+
+	ParsedParam[] parseParam(AppParam params[]) {
+		ParsedParam pParam[] = null
+		for (int count = 0; count < params.arrayLength; count++) {
+			ParsedParam p
+			if (params[count].string[0] == "-") {
+				p = new ParsedParam()
+				p.type = getArg(params[count].string)
+				if (p.type == null) { return null }
+				if (composedArg(p.type)) {
+					p.value = params[count+1].string
+					if (p.value[0] == "-") { throw new Exception("$(params[count].string) requires a second argument.") }
+					p.raw = new char[](params[count].string, " ", params[count+1].string)
+					count++
+				} else { p.raw = params[count].string }
+				pParam = new ParsedParam[](pParam, p)
+			} else { out.println("Invalid param! For more information type: dana ws.core -help") }
+		}
+		return pParam
+	}
+
+	int processParams(AppParam params[]) {
+		if (params.arrayLength == 0) {
+			help()
+			return 1
+		}
+		if (params.arrayLength > 0) {
+			ParsedParam pParam[] = parseParam(params)
+			if (pParam == null) { 
+				help()
+				return 0
+			}
+			for (int count = 0; count < pParam.arrayLength; count++) {
+				if (pParam[count].type == IP_ADDR) {
+					host = pParam[count].value
+				} else if (pParam[count].type == HELP) {
+					help()
+					return 0
+				} else { throw new Exception("$(pParam[count].raw) is not a valid param.") }
+			}
+		}
+		return 1
+	}
+
+	int App:main(AppParam params[]) {
+		if (processParams(params) == 0) { return 1 }
+		fSystem.delete("../../configs/build/dc/database/database.config")
+		TextFile tFile = new TextFile("../../configs/build/dc/database/database.config", File.WRITE)
+		tFile.writeLine(new char[]("database: ", host))
+		tFile.writeLine(new char[]("db_user: root"))
+		tFile.writeLine(new char[]("db_pass: root"))
+		tFile.close()
+		return 0
+	}
+}

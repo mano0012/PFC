@@ -1,0 +1,80 @@
+// Module that interacts with HPA
+//
+// Author: Roberto Rodrigues Filho
+// August @ 2020
+
+const char debugMSG[] = "[@HPA]"
+
+/* HPA gateway info */
+const char BASE_URL[] = "35.223.249.110:3333"
+const char SEND_ENDPOINT[] = "/writeMetric"
+const char REGISTER_ENDPOINT[] = "/register"
+const char END[] = "\r\n\r\n"
+const char EXECUTION_TIME = "execution_time"
+
+component provides App requires io.Output out, data.IntUtil iu, monitoring.Perception,
+	net.TCPSocket, net.http.HTTPRequest request, data.StringUtil strUtil, data.json.JSONParser parser, time.Timer t,
+	data.DecUtil du {
+
+	Perception perception = null
+	char id[] = null
+    int qtdGlobal = 0
+
+	bool registerHPA() {
+		char req[] = new char[](BASE_URL, REGISTER_ENDPOINT)
+		out.println("$(debugMSG) Making request: $req")
+		id = request.get(req, null).content
+		out.println("$(debugMSG) ID: $id")
+
+		return true
+	}
+
+	void send(dec value) {
+		int intValue = value
+		char req[] = new char[](BASE_URL, SEND_ENDPOINT, "?id=$id&value=$(iu.intToString(intValue))&qtd=$qtdGlobal")
+		request.get(req, null)
+		out.println("$(debugMSG) Making request: $req")
+	}
+
+	dec process(char perceptionData[]) {
+		JSONElement document = parser.parseDocument(perceptionData)
+		JSONElement metricsJSON = parser.getValue(document, "metrics")
+		if (metricsJSON != null) {
+			for (int pointer = 0; pointer < metricsJSON.children.arrayLength; pointer++) {
+				JSONElement childrenMetrics = metricsJSON.children[pointer]
+				char name[] = parser.getValue(childrenMetrics, "name").value
+				//dec value = du.decFromString(parser.getValue(childrenMetrics, "value").value)
+				int value = iu.intFromString(parser.getValue(childrenMetrics, "value").value)
+				int count = iu.intFromString(parser.getValue(childrenMetrics, "count").value)
+				dec metricValue
+				if (value == INT_MAX) { metricValue = 0.0 }
+				else { metricValue = value/count }
+                if(count > 0){
+					qtdGlobal = count
+				}
+				out.println("$(du.decToString(metricValue))")
+				return metricValue
+			}
+		}
+		return 0.0
+	}
+
+	int App:main(AppParam params[]) {
+		perception = new Perception(false)
+		AppParam params2[] = new AppParam[2]
+		params2[0] = new AppParam()
+		params2[0].string = "-p"
+		params2[1] = new AppParam()
+		params2[1].string = "2020"
+		perception.setMain("../repository/TCPNetwork.o", params2)
+		perception.addProxy("|../pal/monitoring/proxies/DCProxy.o|*(*:hh.HTTPHandler[0]:*)|")
+		if (registerHPA()) {
+			perception.getPerceptionData()
+			while (true) {
+				t.sleep(5000)
+				send(process(perception.getPerceptionData()))
+			}
+		} else { out.println("$(debugMSG) Something went wrong!") }
+		return 0
+	}
+} 

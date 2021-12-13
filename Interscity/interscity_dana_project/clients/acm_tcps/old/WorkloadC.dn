@@ -1,0 +1,21 @@
+// This implements low entropy high volume of data -- CACHE COMPRESSION should win
+component provides App requires io.Output out, net.http.HTTPRequest request,
+	time.Calendar ic, time.DateUtil dateUtil, data.IntUtil iu {
+	char url[] = "35.188.47.150:2020/collector/resources/1/data"
+	
+	int App:main(AppParam params[]) {
+		while(true) {
+			DateTime dt1 = null
+			DateTime dt2 = null
+			int result = 0
+			dt1 = ic.getTime()
+			HTTPResponse response = request.get(url, null)
+			dt2 = ic.getTime()
+			if ((dt1 != null) && (dt2 != null)) {
+				result = dateUtil.toMilliseconds(dateUtil.diff(dt1, dt2))
+			}
+			out.println("$(iu.intToString(result)) ms")
+		}
+		return 0
+	}
+}

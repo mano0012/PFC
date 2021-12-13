@@ -1,0 +1,7 @@
+//uses rest.RESys
+uses monitoring.Perception
+uses hpa.HPANotifier
+
+interface Learning {
+	void learns(store Perception resys, int collectionTime, int explorationTreshold, int rounds, HPANotifier notifier)
+}

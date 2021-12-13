@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: interscity-deployment
+  namespace: default
+  labels:
+    run: interscity-deployment 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: interscity-deployment
+  template:
+    metadata:
+      labels:
+        run: interscity-deployment
+    spec:
+      containers:
+      - name: interscity-pal
+        image: gcr.io/kubernetes-pfc/interscity
+        readinessProbe:
+          httpGet:
+            path: /collector/resources/1/data/last
+            port: 2020
+          initialDelaySeconds: 30
+          periodSeconds: 10

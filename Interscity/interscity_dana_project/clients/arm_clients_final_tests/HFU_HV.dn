@@ -1,0 +1,152 @@
+/* HFU_LV.dn
+ *
+ * High frequency of updates, low volume of data client.
+ * Copied data instances examples from Marcio (:
+ * PS: requests are always *constantly* (no intervals) being cast.
+ *
+ * Author: Roberto Rodrigues Filho - September @ 2018
+ */
+
+uses data.String
+
+const char debugMSG[] = "[@HFU_HV]"
+
+// tunning constants
+const int NUM_SQ_REQUEST = 1
+const int SLEEP_INTERVAL = 100
+const char SERVER_ADDRESS[] = "localhost"//"scc-mc1.lancs.ac.uk"
+
+data InterscityMsg {
+	char response[]
+	char uuid[]
+	char device[]
+	char description[]
+	String capabilities[]
+	char status[]
+	dec lat
+	dec lon
+	char country[]
+	char state[]
+	char city[]
+	char neighborhood[]
+	char postal_code[]
+	char created_at[]
+	char updated_at[]
+	int id
+}
+
+component provides App requires io.Output out, data.IntUtil iu, time.Timer timer, net.http.HTTPRequest request,
+	time.Calendar ic, time.DateUtil dateUtil, io.TextFile, io.Input in, data.json.JSONEncoder encoder {
+
+	bool flag = true
+
+	char[] formatTimeStamp(DateTime dt) {
+		return new char[]("[", iu.intToString(dt.hour), ":",
+			iu.intToString(dt.minute), ":", iu.intToString(dt.second), ":", iu.intToString(dt.millisecond), "]")
+	}
+
+	void triggerRequests(TextFile file, char url[]) {
+		DateTime dt1 = null
+		DateTime dt2 = null
+		int result = 0
+		dt1 = ic.getTime()
+		HTTPResponse response = request.get(url, null)
+		dt2 = ic.getTime()
+		if ((dt1 != null) && (dt2 != null)) {
+			result = dateUtil.toMilliseconds(dateUtil.diff(dt1, dt2))
+		}
+		file.writeLine(new char[](formatTimeStamp(dt2), " ", iu.intToString(result)))
+	}
+
+	//void start(char payload[], char uuid[], int collect_number) {
+	void start(char payload[], char uuid[]) {
+		TextFile file[] = new TextFile[1]
+
+		char requestURL[] = new char[]("http://", SERVER_ADDRESS,
+			":2020//collector/resources/", uuid, "/data")
+		char updateURL[] = new char[]("http://", SERVER_ADDRESS,
+			":2018/adaptor/resources/", uuid, "/data")
+
+		for (int i = 0; i < 1; i++) {
+			file[i] = new TextFile(new char[]("HFU_HV_RESULTS/request-file-burst-", iu.intToString(i+1), ".data"),
+				//file[i] = new TextFile(new char[]("HFU_HV_RESULTS/request-file-burst-", iu.intToString(collect_number), ".data"),
+				File.FILE_ACCESS_WRITE)
+		}
+		while (flag) {
+			for (int i = 0; i < NUM_SQ_REQUEST; i++) {
+				triggerRequests(file[0], requestURL)
+			}
+			request.post(updateURL, null, payload)
+			timer.sleep(SLEEP_INTERVAL)
+		}
+		for (int i = 0; i < 1; i++) {
+			file[i].close()
+		}
+	}
+
+	int App:main(AppParam params[]) {
+		/* --------------REGISTERING RESOURCE-------------- */
+		out.println("$(debugMSG) Client started...")
+		out.println("$(debugMSG)  Registering resource...")
+		// registering resource: bus ...
+		char jsonBus[] = new char[]("{",
+			"\"data\": {",
+				"\"description\": \"public_bus\",",
+				"\"capabilities\": [\"buslocation\", \"number_of_people\", \"noise_level\"],",
+				"\"status\": \"active\",",
+				"\"lat\": -23.559615,",
+				"\"lon\": -46.731385",
+			"}",
+		"}")
+		char url[] = new char[]("http://", SERVER_ADDRESS, ":2018/adaptor/resources")
+		HTTPResponse response = request.post(url, null, jsonBus)
+		InterscityMsg formatedResponse = encoder.jsonToData(response.content, typeof(InterscityMsg), null)
+
+		/* --------------ADDING DATA--------------*/
+		out.println("$(debugMSG)  Adding data to the database...")
+		// adding one location to the database...
+		char jsonBus_DataToBeSent[] = new char[]("{",
+		"\"data\": {",
+				"\"public_bus\": [",
+					"{",
+						"\"location\": {",
+							"\"lat\": -10.00032,",
+							"\"lon\": -23.559615",
+							"},",
+						"\"speed\": 54,",
+						"\"uuid\": $(formatedResponse.uuid),",
+						"\"bus_line\": \"875c-10-1\",",
+						"\"timestamp\": \"2017-06-14T17:52:25.428Z\"",
+					"}",
+				"]",
+			"}",
+		"}")
+		for (int i = 0; i < 200; i++) {
+			url = new char[]("http://", SERVER_ADDRESS, ":2018/adaptor/resources/$(formatedResponse.uuid)/data")
+			response = request.post(url, null, jsonBus_DataToBeSent)
+			if((response.headers[0].value) == "HTTP/1.1 200 OK") { out.println("$(debugMSG) Data sent successfully!") }
+		}
+
+		out.println("Press enter to start triggering requests...")
+		in.readln()
+
+		/* --------------TRIGGERING REQUESTS-------------- */
+		out.println(new char[]("$(debugMSG) Starting requests... "))
+
+		Thread startThread
+		//for (int j = 1; j <= 30; j++) {
+			startThread = asynch::start(jsonBus_DataToBeSent, formatedResponse.uuid)
+		//}
+
+
+
+
+		out.println("Press enter to finish...")
+		in.readln()
+		flag = false
+		startThread.join()
+		out.println("$(debugMSG) Client terminated successfully.")
+
+		return 0
+	}
+}

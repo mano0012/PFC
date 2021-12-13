@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: interscity-learner-deployment
+  namespace: default
+  labels:
+    run: interscity-learner-deployment 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: interscity-learner-deployment
+  template:
+    metadata:
+      labels:
+        run: interscity-learner-deployment
+    spec:
+      containers:
+      - name: interscity-learner
+        image: gcr.io/kubernetes-pfc/interscity-learner
+        resources:
+          requests:
+            cpu: 400m
+        readinessProbe:
+          httpGet:
+            path: /collector/resources/1/data/last
+            port: 2020
+          initialDelaySeconds: 30
+          periodSeconds: 10

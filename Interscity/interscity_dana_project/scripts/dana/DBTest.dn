@@ -1,0 +1,117 @@
+uses data_collector.DataCollectorManager
+
+const char debugMSG[] = "[@DanaPediaDBCreator]"
+
+// list of params
+const char IP_ADDR[] = "ip_addr"
+const char HELP[]     = "help"
+
+data ParsedParam {
+	char type[]
+	char value[]
+	char raw[]
+}
+
+component provides App requires io.Output out, data.mysql.MySQL, 
+	encoding.Encoder:uri encoder, util.ConfigFile, data.IntUtil iu, data.json.JSONEncoder jencoder {
+
+	char host[] = null
+
+	// add the alias mapping and do not forget to add composed args to the composedArg function
+	char[] getArg(char alias[]) {
+		if (alias == "-ip") { return IP_ADDR }
+		else if (alias == "-help") { return HELP }
+		else { throw new Exception("$alias not a valid param.") }
+		return null
+	}
+
+	// verify if a param is composed, i.e. -p 232
+	bool composedArg(char arg[]) {
+		if (arg == IP_ADDR) { return true }
+		return false
+	}
+
+	void help() {
+		out.println("DCScheme [version 100]")
+		out.println("\nUsage: dana DCScheme")
+		out.println("\nOptions:")
+		out.println("-help      \t List commands that can be passed as parameter to the DCScheme component.")
+		out.println("-ip [ip]\t Specify the server IP address of the database.")
+	}
+
+	ParsedParam[] parseParam(AppParam params[]) {
+		ParsedParam pParam[] = null
+		for (int count = 0; count < params.arrayLength; count++) {
+			ParsedParam p
+			if (params[count].string[0] == "-") {
+				p = new ParsedParam()
+				p.type = getArg(params[count].string)
+				if (p.type == null) { return null }
+				if (composedArg(p.type)) {
+					p.value = params[count+1].string
+					if (p.value[0] == "-") { throw new Exception("$(params[count].string) requires a second argument.") }
+					p.raw = new char[](params[count].string, " ", params[count+1].string)
+					count++
+				} else { p.raw = params[count].string }
+				pParam = new ParsedParam[](pParam, p)
+			} else { out.println("Invalid param! For more information type: dana ws.core -help") }
+		}
+		return pParam
+	}
+
+	int processParams(AppParam params[]) {
+		if (params.arrayLength == 0) { return 1 }
+		if (params.arrayLength > 0) {
+			ParsedParam pParam[] = parseParam(params)
+			if (pParam == null) { return 0 }
+			for (int count = 0; count < pParam.arrayLength; count++) {
+				if (pParam[count].type == IP_ADDR) {
+					host = pParam[count].value
+				} else if (pParam[count].type == HELP) {
+					help()
+					return 0
+				} else { throw new Exception("$(pParam[count].raw) is not a valid param.") }
+			}
+		}
+		return 1
+	}
+
+	int App:main(AppParam params[]) {
+		ConfigFile configFile = new ConfigFile("../../configs/build/dc/database/database.config")
+		if (params.arrayLength == 0) { host = configFile.getValue("database") }
+		else if (processParams(params) == 0) { return 1 }
+		char user[] = configFile.getValue("db_user")
+		char pass[] = configFile.getValue("db_pass")
+		/* mysql object */
+		MySQL mysql = new MySQL(host, 0, user, pass, "data_collector")
+		out.println("$(debugMSG) Adding 5000 registers...")
+		char egData[] = null
+		int count = 0
+		for (int i = 0; i < 10; i++) {
+			for (int k = 0; k < i; k++) {
+				for (int j = 0; j < 100; j++) {
+					count++ 
+					PublicBusData bus = new PublicBusData()
+					bus.location = new Location()
+					bus.location.lat = "-10.00032"
+					bus.location.lon = "-23.559615"
+					bus.speed = 54
+					bus.uuid = iu.intToString(i+1)
+					bus.busline = "875c-10-1"
+					bus.timestamp = "2017-06-14T17:52:25.428Z"
+					PublicBusData myData[] = new PublicBusData[](bus)
+					egData = jencoder.jsonFromArray(myData, null)
+					mysql.execute(new char[]("INSERT INTO data (value, uuid) VALUES (\"", 
+						encoder.encode(egData) 
+						,"\" ,\"", iu.intToString(i+1),"\");"))
+					out.print("\r$(debugMSG) $(iu.intToString(count))...      ")
+				}
+			}
+		}
+		out.print("\r$(debugMSG) 5000 registers\n")
+	    /* closing... */
+		out.println("$(debugMSG) Database created!\nBye!")
+		mysql.close()
+		return 0
+	}
+}

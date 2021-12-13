@@ -1,0 +1,8 @@
+uses distributor_proxies.Proxy
+
+interface PortManager {
+	void setInfo(int newPortNum, char localAddress[], store ProxyInfo newInfo[])
+	ProxyInfo[] generatePorts(int num)
+	char[] getLocalAddress()
+	ProxyInfo[] getInfo()
+}
